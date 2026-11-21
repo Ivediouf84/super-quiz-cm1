@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Mon Super Quiz CM1</title>
+  <meta name="description" content="Jeu éducatif de révision pour le CM1 : Histoire, Géographie, Sciences et Technologie, d'après le manuel Découverte du monde CM1.">
+  <meta name="theme-color" content="#6d4aff">
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- ===== EN-TÊTE ===== -->
+  <header class="topbar no-print">
+    <button class="brand" data-go="home" aria-label="Retour à l'accueil">
+      <img src="assets/logo.svg" alt="" width="40" height="40">
+      <span class="brand-text">Super Quiz <b>CM1</b></span>
+    </button>
+    <div class="top-stats">
+      <span class="pill pill-points" title="Mes points">⭐ <b id="hdr-points">0</b></span>
+      <span class="pill pill-level" title="Mon niveau" id="hdr-level">Apprenti</span>
+    </div>
+    <div class="top-actions">
+      <button class="icon-btn" id="btn-sound" aria-label="Activer ou couper le son" title="Son">🔊</button>
+      <button class="icon-btn" id="btn-fullscreen" aria-label="Plein écran" title="Plein écran">⛶</button>
+    </div>
+  </header>
+
+  <main id="app">
+    <!-- ===== ACCUEIL ===== -->
+    <section class="screen active" id="scr-home">
+      <div class="hero">
+        <div class="hero-text">
+          <p class="hello" id="home-hello">Bonjour champion !</p>
+          <h1 class="title">MON SUPER QUIZ CM1</h1>
+          <p class="subtitle">Apprends, joue et deviens un champion !</p>
+          <div class="home-buttons">
+            <button class="big-btn btn-play" data-go="subjects"><span>🎮</span> COMMENCER À JOUER</button>
+            <button class="big-btn btn-results" data-go="dashboard"><span>📊</span> MES RÉSULTATS</button>
+            <button class="big-btn btn-exam" data-go="exam-setup"><span>📝</span> MODE EXAMEN</button>
+            <button class="big-btn btn-daily" data-go="daily"><span>🎯</span> DÉFIS DU JOUR</button>
+          </div>
+        </div>
+        <div class="hero-art">
+          <img src="assets/hero.svg" alt="Un hibou savant lit un livre devant un globe et un microscope" class="float">
+        </div>
+      </div>
+
+      <h2 class="section-title">Plus de jeux</h2>
+      <div class="tiles">
+        <button class="tile" data-go="random"><span class="tile-ico">🎲</span><b>Quiz aléatoire</b><small>Des questions surprises</small></button>
+        <button class="tile" data-go="calc-setup"><span class="tile-ico">🧮</span><b>Calcul rapide</b><small>Des calculs chronométrés</small></button>
+        <button class="tile" data-go="chrono-setup"><span class="tile-ico">⏱️</span><b>Défi chrono</b><small>Le plus de réponses possible</small></button>
+        <button class="tile" data-go="errors"><span class="tile-ico">🔁</span><b>Mes erreurs</b><small>Je révise ce que j'ai raté</small></button>
+        <button class="tile" data-go="trophies"><span class="tile-ico">🏆</span><b>Trophées</b><small>Mes badges et records</small></button>
+      </div>
+      <p class="book-note">Questions tirées du manuel <i>Découverte du monde CM1</i> (Éditions Didactikos, 2022).</p>
+    </section>
+
+    <!-- ===== BIBLIOTHÈQUE DES MATIÈRES ===== -->
+    <section class="screen" id="scr-subjects">
+      <div class="screen-head">
+        <button class="back-btn" data-go="home">← Accueil</button>
+        <h2>Choisis ta matière</h2>
+      </div>
+      <div class="subject-grid" id="subject-grid"></div>
+    </section>
+
+    <!-- ===== DÉTAIL D'UNE MATIÈRE ===== -->
+    <section class="screen" id="scr-subject">
+      <div class="screen-head">
+        <button class="back-btn" data-go="subjects">← Matières</button>
+        <h2 id="subject-title">Matière</h2>
+      </div>
+      <div id="subject-body"></div>
+    </section>
+
+    <!-- ===== RÉVISION (fiches) ===== -->
+    <section class="screen" id="scr-revision">
+      <div class="screen-head">
+        <button class="back-btn" id="revision-back">← Retour</button>
+        <h2 id="revision-title">Révision</h2>
+      </div>
+      <div id="revision-body"></div>
+    </section>
+
+    <!-- ===== JEU ===== -->
+    <section class="screen" id="scr-game">
+      <div class="game-top">
+        <button class="back-btn small" id="game-quit">✕ Quitter</button>
+        <div class="game-title" id="game-title">Quiz</div>
+        <div class="game-meta">
+          <span class="pill" id="game-timer" hidden>⏱️ <b>0:00</b></span>
+          <span class="pill pill-points">⭐ <b id="game-points">0</b></span>
+          <span class="pill pill-streak" id="game-streak" hidden>🔥 <b>0</b></span>
+        </div>
+      </div>
+      <div class="progress"><div class="progress-bar" id="game-progress"></div></div>
+      <div class="progress-label" id="game-progress-label">Question 1 / 10</div>
+      <div class="card question-card" id="question-card"></div>
+      <div class="feedback" id="feedback" hidden></div>
+    </section>
+
+    <!-- ===== RÉSULTATS D'UNE PARTIE ===== -->
+    <section class="screen" id="scr-result">
+      <div class="card result-card" id="result-body"></div>
+    </section>
+
+    <!-- ===== EXAMEN : RÉGLAGES ===== -->
+    <section class="screen" id="scr-exam-setup">
+      <div class="screen-head">
+        <button class="back-btn" data-go="home">← Accueil</button>
+        <h2>📝 Mode examen</h2>
+      </div>
+      <div class="card setup-card" id="exam-setup-body"></div>
+    </section>
+
+    <!-- ===== EXAMEN : RÉSULTATS ===== -->
+    <section class="screen" id="scr-exam-result">
+      <div class="card result-card" id="exam-result-body"></div>
+    </section>
+
+    <!-- ===== QUIZ ALÉATOIRE ===== -->
+    <section class="screen" id="scr-random">
+      <div class="screen-head">
+        <button class="back-btn" data-go="home">← Accueil</button>
+        <h2>🎲 Générateur de quiz aléatoire</h2>
+      </div>
+      <div class="card setup-card" id="random-body"></div>
+    </section>
+
+    <!-- ===== CALCUL RAPIDE ===== -->
+    <section class="screen" id="scr-calc-setup">
+      <div class="screen-head">
+        <button class="back-btn" data-go="home">← Accueil</button>
+        <h2>🧮 Calcul rapide</h2>
+      </div>
+      <div class="card setup-card" id="calc-body"></div>
+    </section>
+
+    <!-- ===== DÉFI CHRONO ===== -->
+    <section class="screen" id="scr-chrono-setup">
+      <div class="screen-head">
+        <button class="back-btn" data-go="home">← Accueil</button>
+        <h2>⏱️ Défi chrono</h2>
+      </div>
+      <div class="card setup-card" id="chrono-body"></div>
+    </section>
+
+    <!-- ===== RÉVISION DES ERREURS ===== -->
+    <section class="screen" id="scr-errors">
+      <div class="screen-head">
+        <button class="back-btn" data-go="home">← Accueil</button>
+        <h2>🔁 Révision de mes erreurs</h2>
+      </div>
+      <div id="errors-body"></div>
+    </section>
+
+    <!-- ===== DÉFIS DU JOUR ===== -->
+    <section class="screen" id="scr-daily">
+      <div class="screen-head">
+        <button class="back-btn" data-go="home">← Accueil</button>
+        <h2>🎯 Défis du jour</h2>
+      </div>
+      <div id="daily-body"></div>
+    </section>
+
+    <!-- ===== TABLEAU DE BORD ===== -->
+    <section class="screen" id="scr-dashboard">
+      <div class="screen-head">
+        <button class="back-btn no-print" data-go="home">← Accueil</button>
+        <h2>📊 Mes résultats</h2>
+      </div>
+      <div id="dashboard-body"></div>
+    </section>
+
+    <!-- ===== TROPHÉES ===== -->
+    <section class="screen" id="scr-trophies">
+      <div class="screen-head">
+        <button class="back-btn" data-go="home">← Accueil</button>
+        <h2>🏆 Mes trophées</h2>
+      </div>
+      <div id="trophies-body"></div>
+    </section>
+  </main>
+
+  <!-- ===== FENÊTRE (leçon, confirmation) ===== -->
+  <div class="modal-backdrop" id="modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <button class="modal-close" id="modal-close" aria-label="Fermer">✕</button>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- ===== NOTIFICATIONS ===== -->
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <div class="confetti" id="confetti" aria-hidden="true"></div>
+
+  <script src="questions.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
