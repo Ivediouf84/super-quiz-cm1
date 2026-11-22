@@ -1,33 +1,10 @@
 /* =====================================================================
-   MON SUPER QUIZ CM1 — Banque de questions
-   Source : « Découverte du monde CM1 » (Éditions Didactikos, 2022)
-   Matières : Histoire · Géographie · Initiation Scientifique et Technologique
-   ---------------------------------------------------------------------
-   COMMENT AJOUTER DES QUESTIONS ?
-   Dans la leçon voulue, ajoute une ligne dans le tableau "questions"
-   avec l'une des fonctions ci-dessous. Le premier paramètre est le
-   niveau : 1 = Débutant, 2 = Intermédiaire, 3 = Expert.
-   La bonne réponse est TOUJOURS écrite en premier : le jeu mélange
-   automatiquement les propositions à l'affichage.
-
-   qcm(niv, question, bonneRéponse, [3 mauvaises], explication)
-   vf(niv, affirmation, true|false, explication)
-   multi(niv, question, [bonnes], [mauvaises], explication)
-   comp(niv, "phrase avec ___", motJuste, [autres mots], explication)
-   trou(niv, question, [réponses acceptées], explication)
-   rel(niv, consigne, [[gauche, droite], ...], explication)
-   ord(niv, consigne, [éléments dans le BON ordre], explication)
-   calc(niv, question, nombre, explication)
+   CM1 — Découverte du monde (Éditions Didactikos, 2022)
+   Histoire · Géographie · Initiation Scientifique et Technologique
+   Mode d'emploi des fonctions : voir data/_core.js
    ===================================================================== */
 (function () {
-  const qcm = (lv, q, good, bad, ex) => ({ type: 'qcm', lv, q, good, bad, ex });
-  const vf = (lv, q, ans, ex) => ({ type: 'vf', lv, q, ans, ex });
-  const multi = (lv, q, good, bad, ex) => ({ type: 'multi', lv, q, good, bad, ex });
-  const comp = (lv, q, good, bad, ex) => ({ type: 'comp', lv, q, good, bad, ex });
-  const trou = (lv, q, ans, ex) => ({ type: 'trou', lv, q, ans, ex });
-  const rel = (lv, q, pairs, ex) => ({ type: 'rel', lv, q, pairs, ex });
-  const ord = (lv, q, items, ex) => ({ type: 'ord', lv, q, items, ex });
-  const calc = (lv, q, ans, ex) => ({ type: 'calc', lv, q, ans, ex });
+  const { qcm, vf, multi, comp, trou, rel, ord, calc } = QB;
 
   /* =================================================================
      HISTOIRE
@@ -1056,14 +1033,14 @@
     ]
   };
 
-  window.QUIZ_DATA = {
-    book: 'Découverte du monde CM1 — Éditions Didactikos (2022)',
-    missingPages: [
-      "Pages 104-105 du manuel (leçon « L'appareil digestif / la digestion ») : absentes du PDF fourni. Aucune question n'a été inventée sur cette leçon.",
-      "Page 128 du manuel (début de la leçon sur la locomotion) : absente du PDF fourni.",
-      "Page 103 : scan flou mais lisible ; son contenu a été vérifié avec les pages 102-103."
+  const tag = (subject, group) => subject.chapters.map((c) => Object.assign(c, { group }));
+  QB.book({
+    classId: 'cm1', domainId: 'dm', legacyIds: true,
+    title: 'Découverte du monde CM1', source: 'Découverte du monde CM1 — Éditions Didactikos (2022)',
+    missing: [
+      "Pages 104-105 (leçon « L'appareil digestif ») absentes du PDF : aucune question inventée sur cette leçon.",
+      'Page 128 (début de la leçon sur la locomotion) absente du PDF.'
     ],
-    levels: { 1: 'Débutant', 2: 'Intermédiaire', 3: 'Expert' },
-    subjects: [histoire, geographie, ist]
-  };
+    chapters: [].concat(tag(histoire, '🏺 Histoire'), tag(geographie, '🗺️ Géographie'), tag(ist, '🔬 Sciences et Technologie'))
+  });
 })();

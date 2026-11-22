@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Mon Super Quiz CM1</title>
-  <meta name="description" content="Jeu éducatif de révision pour le CM1 : Histoire, Géographie, Sciences et Technologie, d'après le manuel Découverte du monde CM1.">
+  <title>Mon Super Quiz</title>
+  <meta name="description" content="Jeu éducatif de révision du CI au CM2 : Mathématiques, Langue et Communication, Éducation au Développement Durable et Découverte du Monde, d'après les manuels Didactikos.">
   <meta name="theme-color" content="#6d4aff">
   <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
   <link rel="stylesheet" href="style.css">
@@ -14,9 +14,10 @@
   <header class="topbar no-print">
     <button class="brand" data-go="home" aria-label="Retour à l'accueil">
       <img src="assets/logo.svg" alt="" width="40" height="40">
-      <span class="brand-text">Super Quiz <b>CM1</b></span>
+      <span class="brand-text">Super <b>Quiz</b></span>
     </button>
     <div class="top-stats">
+      <span class="pill pill-class" id="hdr-class" hidden>🎒</span>
       <span class="pill pill-points" title="Mes points">⭐ <b id="hdr-points">0</b></span>
       <span class="pill pill-level" title="Mon niveau" id="hdr-level">Apprenti</span>
     </div>
@@ -32,10 +33,10 @@
       <div class="hero">
         <div class="hero-text">
           <p class="hello" id="home-hello">Bonjour champion !</p>
-          <h1 class="title">MON SUPER QUIZ CM1</h1>
-          <p class="subtitle">Apprends, joue et deviens un champion !</p>
+          <h1 class="title">MON SUPER QUIZ</h1>
+          <p class="subtitle">Apprends, joue et deviens un champion ! <span class="sub2">Du CI au CM2</span></p>
           <div class="home-buttons">
-            <button class="big-btn btn-play" data-go="subjects"><span>🎮</span> COMMENCER À JOUER</button>
+            <button class="big-btn btn-play" id="btn-start"><span>🎮</span> COMMENCER À JOUER</button>
             <button class="big-btn btn-results" data-go="dashboard"><span>📊</span> MES RÉSULTATS</button>
             <button class="big-btn btn-exam" data-go="exam-setup"><span>📝</span> MODE EXAMEN</button>
             <button class="big-btn btn-daily" data-go="daily"><span>🎯</span> DÉFIS DU JOUR</button>
@@ -46,6 +47,9 @@
         </div>
       </div>
 
+      <h2 class="section-title" id="classes">🎒 Choisis ta classe</h2>
+      <div class="class-grid" id="class-grid"></div>
+
       <h2 class="section-title">Plus de jeux</h2>
       <div class="tiles">
         <button class="tile" data-go="random"><span class="tile-ico">🎲</span><b>Quiz aléatoire</b><small>Des questions surprises</small></button>
@@ -54,14 +58,14 @@
         <button class="tile" data-go="errors"><span class="tile-ico">🔁</span><b>Mes erreurs</b><small>Je révise ce que j'ai raté</small></button>
         <button class="tile" data-go="trophies"><span class="tile-ico">🏆</span><b>Trophées</b><small>Mes badges et records</small></button>
       </div>
-      <p class="book-note">Questions tirées du manuel <i>Découverte du monde CM1</i> (Éditions Didactikos, 2022).</p>
+      <p class="book-note">Questions tirées des manuels <i>Didactikos</i> (Mathématiques, Langue et Communication, EDD, Découverte du Monde).</p>
     </section>
 
-    <!-- ===== BIBLIOTHÈQUE DES MATIÈRES ===== -->
+    <!-- ===== DOMAINES D'UNE CLASSE ===== -->
     <section class="screen" id="scr-subjects">
       <div class="screen-head">
-        <button class="back-btn" data-go="home">← Accueil</button>
-        <h2>Choisis ta matière</h2>
+        <button class="back-btn" data-go="home">← Classes</button>
+        <h2 id="class-title">Choisis ton domaine</h2>
       </div>
       <div class="subject-grid" id="subject-grid"></div>
     </section>
@@ -69,7 +73,7 @@
     <!-- ===== DÉTAIL D'UNE MATIÈRE ===== -->
     <section class="screen" id="scr-subject">
       <div class="screen-head">
-        <button class="back-btn" data-go="subjects">← Matières</button>
+        <button class="back-btn" data-go="subjects">← Domaines</button>
         <h2 id="subject-title">Matière</h2>
       </div>
       <div id="subject-body"></div>
@@ -196,7 +200,9 @@
   <div class="toasts" id="toasts" aria-live="polite"></div>
   <div class="confetti" id="confetti" aria-hidden="true"></div>
 
-  <script src="questions.js"></script>
+  <!-- Données : un fichier par livre (classe × domaine) -->
+  <script src="data/_core.js"></script>
+  <script src="data/cm1-dm.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

@@ -40,20 +40,31 @@
   /* ------------------------------------------------------------------
      2. DONNÉES DU LIVRE (index des questions)
      ------------------------------------------------------------------ */
-  const DATA = window.QUIZ_DATA;
-  const SUBJECTS = DATA.subjects;
+  // Un « livre » = une classe × un domaine (ex. CI × Mathématiques).
+  const CLASSES = window.QUIZ_CLASSES;
+  const DOMAINS = window.QUIZ_DOMAINS;
+  const CLASS = (id) => CLASSES.find((c) => c.id === id);
+  const DOMAIN = (id) => DOMAINS.find((d) => d.id === id);
+  const SUBJECTS = [];            // tous les livres
   const ALL_Q = [];               // toutes les questions avec leur contexte
   const Q_BY_ID = {};
   const LESSON_BY_ID = {};
   const CHAPTER_BY_ID = {};
-  SUBJECTS.forEach((s) => {
-    s.chapters.forEach((c) => {
+  const ORDER = (b) => CLASSES.findIndex((c) => c.id === b.classId) * 10 + DOMAINS.findIndex((d) => d.id === b.domainId);
+  window.QB.books.slice().sort((a, b) => ORDER(a) - ORDER(b)).forEach((def) => {
+    const d = DOMAIN(def.domainId); const k = CLASS(def.classId);
+    const s = Object.assign({}, def, { id: def.classId + '-' + def.domainId, name: d.name, icon: d.ico, color: d.color, className: k.name });
+    const pre = def.legacyIds ? '' : s.id + ':';
+    SUBJECTS.push(s);
+    s.chapters.forEach((c, ci) => {
+      c.id = def.legacyIds ? c.id : pre + (c.id || 'c' + ci);
       CHAPTER_BY_ID[c.id] = { chapter: c, subject: s };
       c.lessons.forEach((l, li) => {
+        l.id = def.legacyIds ? l.id : pre + (l.id || 'c' + ci + 'l' + li);
         LESSON_BY_ID[l.id] = { lesson: l, chapter: c, subject: s, index: li };
         l.questions.forEach((q, qi) => {
           q.id = l.id + '-' + qi;
-          q.subjectId = s.id; q.chapterId = c.id; q.lessonId = l.id;
+          q.subjectId = s.id; q.classId = s.classId; q.domainId = s.domainId; q.chapterId = c.id; q.lessonId = l.id;
           q.lessonTitle = l.title; q.pages = l.pages;
           ALL_Q.push(q); Q_BY_ID[q.id] = q;
         });
@@ -62,6 +73,9 @@
   });
   const SUBJ = (id) => SUBJECTS.find((s) => s.id === id);
   const subjectQuestions = (sid) => ALL_Q.filter((q) => q.subjectId === sid);
+  const classBooks = (cid) => SUBJECTS.filter((s) => s.classId === cid);
+  const classQ = (cid) => ALL_Q.filter((q) => q.classId === cid);
+  const bookOf = (cid, did) => SUBJECTS.find((s) => s.classId === cid && s.domainId === did);
 
   const TYPE_INFO = {
     qcm: { label: 'QCM', ico: '🔤', name: 'QCM' },
@@ -91,7 +105,8 @@
       fiches: {},          // lessonId -> true (fiche lue)
       daily: {},           // date -> {quiz, chrono, calc}
       bestStreak: 0, bestChrono: 0, bestCalc: 0, errorsFixed: 0, bestExam: null,
-      settings: { sound: true }
+      cls: null,           // classe choisie (ci, cp, ce1, ce2, cm1, cm2)
+      settings: { sound: true, voice: true }
     };
   }
   let memoryFallback = null;
@@ -99,7 +114,17 @@
     try {
       const raw = localStorage.getItem(STORE_KEY);
       if (!raw) return defaultState();
-      return Object.assign(defaultState(), JSON.parse(raw));
+      const st = Object.assign(defaultState(), JSON.parse(raw));
+      st.settings = Object.assign({ sound: true, voice: true }, st.settings);
+      // Ancienne version (CM1 seul) : Histoire/Géographie/Sciences → CM1 Découverte du monde
+      ['histoire', 'geographie', 'ist'].forEach((k) => {
+        const o = st.subj[k]; if (!o) return;
+        const t = st.subj['cm1-dm'] || (st.subj['cm1-dm'] = { answered: 0, correct: 0 });
+        t.answered += o.answered; t.correct += o.correct; delete st.subj[k];
+        if (!st.cls) st.cls = 'cm1';
+      });
+      st.games.forEach((g) => { if (['histoire', 'geographie', 'ist'].includes(g.subjectId)) g.subjectId = 'cm1-dm'; });
+      return st;
     } catch (e) { return memoryFallback || defaultState(); }
   }
   let S = loadState();
@@ -116,7 +141,7 @@
     { min: 600, name: 'Savant', ico: '📚' },
     { min: 1200, name: 'Expert', ico: '🎓' },
     { min: 2500, name: 'Maître', ico: '🦉' },
-    { min: 4000, name: 'Champion du CM1', ico: '👑' }
+    { min: 4000, name: 'Grand Champion', ico: '👑' }
   ];
   function rankOf(points) {
     let r = RANKS[0], next = null;
@@ -134,9 +159,10 @@
   const BADGES = [
     { id: 'premier', ico: '🌱', name: 'Premier pas', desc: 'Terminer ta première partie', test: () => S.games.length >= 1 },
     { id: 'genie', ico: '🧠', name: 'Petit génie', desc: 'Faire un sans-faute (au moins 5 questions)', test: (g) => g && g.total >= 5 && g.correct === g.total },
-    { id: 'historien', ico: '🏺', name: 'Grand historien', desc: '40 bonnes réponses en Histoire', test: () => (S.subj.histoire || {}).correct >= 40 },
-    { id: 'geographe', ico: '🌍', name: 'Explorateur géographe', desc: '40 bonnes réponses en Géographie', test: () => (S.subj.geographie || {}).correct >= 40 },
-    { id: 'sciences', ico: '🔬', name: 'Expert en sciences', desc: '40 bonnes réponses en Sciences', test: () => (S.subj.ist || {}).correct >= 40 },
+    { id: 'maths', ico: '🔢', name: 'Champion des mathématiques', desc: '40 bonnes réponses en Mathématiques', test: () => domainCorrect('maths') >= 40 },
+    { id: 'langue', ico: '👑', name: 'Roi de la grammaire', desc: '40 bonnes réponses en Langue et Communication', test: () => domainCorrect('lc') >= 40 },
+    { id: 'planete', ico: '🌿', name: 'Ami de la planète', desc: '40 bonnes réponses en Éducation au Développement Durable', test: () => domainCorrect('edd') >= 40 },
+    { id: 'monde', ico: '🌍', name: 'Explorateur du monde', desc: '40 bonnes réponses en Découverte du Monde', test: () => domainCorrect('dm') >= 40 },
     { id: 'calcul', ico: '🧮', name: 'As du calcul', desc: 'Au moins 8/10 en calcul rapide', test: (g) => g && g.mode === 'calc' && g.total >= 10 && g.correct >= 8 },
     { id: 'lecteur', ico: '📖', name: 'Super lecteur', desc: 'Lire 10 fiches « Je retiens »', test: () => Object.keys(S.fiches).length >= 10 },
     { id: 'serie', ico: '🔥', name: 'Série de feu', desc: '10 bonnes réponses de suite', test: () => S.bestStreak >= 10 },
@@ -146,8 +172,9 @@
     { id: 'correcteur', ico: '🔁', name: 'Chasseur d\'erreurs', desc: 'Corriger 10 erreurs en révision', test: () => S.errorsFixed >= 10 },
     { id: 'quotidien', ico: '🎯', name: 'Défis relevés', desc: 'Réussir les 3 défis d\'un même jour', test: () => Object.values(S.daily).some((d) => d.quiz != null && d.chrono != null && d.calc != null) },
     { id: 'mille', ico: '💎', name: 'Mille points', desc: 'Atteindre 1 000 points', test: () => S.points >= 1000 },
-    { id: 'champion', ico: '👑', name: 'Champion du CM1', desc: 'Réussir au moins une fois 70 % de toutes les questions', test: () => pct(Object.keys(S.mastered).length, ALL_Q.length) >= 70 }
+    { id: 'champion', ico: '🏆', name: 'Champion de ma classe', desc: 'Réussir au moins une fois 70 % des questions de ta classe', test: () => S.cls && classQ(S.cls).length > 0 && pct(classQ(S.cls).filter((q) => S.mastered[q.id]).length, classQ(S.cls).length) >= 70 }
   ];
+  function domainCorrect(did) { return Object.keys(S.subj).filter((k) => k.endsWith('-' + did)).reduce((a, k) => a + (S.subj[k].correct || 0), 0); }
   function checkBadges(game) {
     const fresh = [];
     BADGES.forEach((b) => {
@@ -186,8 +213,12 @@
      6. INTERFACE GÉNÉRALE
      ------------------------------------------------------------------ */
   let currentScreen = 'home';
+  const dkey = () => todayKey() + '-' + (S.cls || '');
+  const CLASS_SCREENS = ['subjects', 'exam-setup', 'random', 'calc-setup', 'chrono-setup', 'daily'];
   function show(id) {
     stopTimers();
+    if (CLASS_SCREENS.includes(id) && !S.cls) { toast('Choisis d\'abord ta classe 👇'); id = 'home'; }
+    if (CLASS_SCREENS.includes(id) && id !== 'subjects' && !classQ(S.cls).length) { toast(`Les quiz du ${CLASS(S.cls).name} sont en préparation. Choisis une autre classe.`); id = 'home'; }
     $$('.screen').forEach((s) => s.classList.remove('active'));
     const el = $('#scr-' + id); if (el) el.classList.add('active');
     currentScreen = id;
@@ -199,6 +230,7 @@
     $('#hdr-points').textContent = S.points.toLocaleString('fr-FR');
     const { rank } = rankOf(S.points);
     $('#hdr-level').textContent = rank.ico + ' ' + rank.name;
+    const hc = $('#hdr-class'); if (hc) { hc.hidden = !S.cls; if (S.cls) { hc.textContent = '🎒 ' + CLASS(S.cls).name; } }
     $('#btn-sound').textContent = S.settings.sound ? '🔊' : '🔇';
     $('#btn-sound').classList.toggle('off', !S.settings.sound);
   }
@@ -245,9 +277,32 @@
      ------------------------------------------------------------------ */
   function renderHome() {
     $('#home-hello').textContent = S.name ? `Bonjour ${S.name} !` : 'Bonjour champion !';
+    $('#class-grid').innerHTML = CLASSES.map((c) => {
+      const books = classBooks(c.id); const nq = classQ(c.id).length;
+      const prog = nq ? pct(classQ(c.id).filter((q) => S.mastered[q.id]).length, nq) : 0;
+      return `<button class="class-card ${S.cls === c.id ? 'current' : ''}" data-class="${c.id}" style="--cc:${c.color}">
+        <span class="class-ico">${c.ico}</span><span class="class-name">${c.name}</span><small>${esc(c.full)}</small>
+        <span class="class-meta">${books.length ? `${books.length} / 4 domaines · ${nq} questions` : 'En préparation'}</span>
+        ${nq ? `<span class="meter"><i style="width:${prog}%"></i></span>` : ''}
+      </button>`;
+    }).join('');
+    $$('#class-grid [data-class]').forEach((b) => (b.onclick = () => { sfx('click'); openClass(b.dataset.class); }));
+    updateHeader();
+  }
+  function openClass(cid) { S.cls = cid; save(); updateHeader(); show('subjects'); }
+  function needClass(next) { // choisir une classe avant certains modes
+    if (S.cls) return true;
+    toast('Choisis d\'abord ta classe 👇'); show('home'); return false;
   }
   function renderSubjects() {
-    $('#subject-grid').innerHTML = SUBJECTS.map((s) => {
+    if (!S.cls) { show('home'); return; }
+    const k = CLASS(S.cls);
+    $('#class-title').innerHTML = `${k.ico} Classe de ${k.name} <small>— choisis ton domaine</small>`;
+    $('#subject-grid').innerHTML = DOMAINS.map((d) => {
+      const s = bookOf(S.cls, d.id);
+      if (!s) return `<article class="subject-card soon">
+        <div class="subject-banner" style="background:linear-gradient(135deg, #b8b2c4, #8d86a0)"><span class="ico">${d.ico}</span><h3>${esc(d.name)}</h3></div>
+        <div class="subject-info"><p style="font-weight:800;color:var(--ink-soft)">🛠️ Quiz en préparation : bientôt disponible !</p></div></article>`;
       const nq = subjectQuestions(s.id).length; const prog = subjectProgress(s.id); const rate = subjectRate(s.id);
       const nLessons = s.chapters.reduce((a, c) => a + c.lessons.length, 0);
       return `<article class="subject-card">
@@ -274,13 +329,15 @@
   let currentSubject = null;
   function openSubject(sid) {
     currentSubject = sid; const s = SUBJ(sid);
-    $('#subject-title').innerHTML = `${s.icon} ${esc(s.name)}`;
-    let n = 0;
-    $('#subject-body').innerHTML = s.chapters.map((c) => {
+    $('#subject-title').innerHTML = `${s.icon} ${esc(s.name)} <small>· ${esc(s.className)}</small>`;
+    let n = 0; let lastGroup = null;
+    $('#subject-body').innerHTML = `<p class="book-src">📘 ${esc(s.source || s.title || '')}</p>` + s.chapters.map((c) => {
       const cq = ALL_Q.filter((q) => q.chapterId === c.id).length;
-      return `<div class="chapter">
+      const groupHead = c.group && c.group !== lastGroup ? `<h2 class="group-title">${esc(c.group)}</h2>` : '';
+      lastGroup = c.group;
+      return `${groupHead}<div class="chapter">
         <div class="chapter-head">
-          <h3><span class="palier">Palier ${c.palier}</span>${esc(c.title)}</h3>
+          <h3>${c.palier ? `<span class="palier">${esc(String(c.palier).match(/^\d+$/) ? 'Palier ' + c.palier : c.palier)}</span>` : ''}${esc(c.title)}</h3>
           <div class="chapter-actions">
             <button class="btn ghost" data-revise="${c.id}">📖 Réviser le chapitre</button>
             <button class="btn yellow" data-chapquiz="${c.id}">🎮 Quiz du chapitre (${cq})</button>
@@ -295,7 +352,7 @@
             <span class="lesson-stars">${starsHtml(stars)}</span>
           </button>`;
         }).join('')}</div></div>`;
-    }).join('') + (sid === 'ist' ? `<div class="info-box">ℹ️ La leçon « L'appareil digestif » (pages 104-105 du manuel) est absente du fichier PDF fourni : aucune question n'a été inventée à son sujet.</div>` : '');
+    }).join('') + (s.missing && s.missing.length ? `<div class="info-box">ℹ️ ${s.missing.map(esc).join('<br>ℹ️ ')}</div>` : '');
     $$('#subject-body [data-lesson]').forEach((b) => (b.onclick = () => openLesson(b.dataset.lesson)));
     $$('#subject-body [data-revise]').forEach((b) => (b.onclick = () => openRevision(b.dataset.revise)));
     $$('#subject-body [data-chapquiz]').forEach((b) => (b.onclick = () => openChapterQuiz(b.dataset.chapquiz)));
@@ -303,7 +360,8 @@
   }
 
   function retiensHtml(lesson) {
-    return `<div class="retiens"><h4>📌 Je retiens — manuel p. ${esc(lesson.pages)}</h4><ul>${lesson.summary.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>`;
+    if (!lesson.summary || !lesson.summary.length) return '';
+    return `<div class="retiens"><h4>📌 Je retiens — manuel p. ${esc(lesson.pages)}</h4>${lesson.img ? `<img class="retiens-img" src="${esc(lesson.img)}" alt="">` : ''}<ul>${lesson.summary.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>`;
   }
   function formatOptions(questions) {
     const counts = {}; questions.forEach((q) => (counts[q.type] = (counts[q.type] || 0) + 1));
@@ -399,6 +457,12 @@
   function genOperation(level) {
     const r = (a, b) => a + Math.floor(rand() * (b - a + 1));
     let a, b, op, ans;
+    const small = S.cls === 'ci' || S.cls === 'cp';
+    if (small || (S.cls === 'ce1' && level == 1)) { // petites classes : additions et soustractions simples
+      const max = S.cls === 'ci' ? 10 : S.cls === 'cp' ? (level == 1 ? 20 : 50) : 100;
+      if (rand() < 0.55) { a = r(0, Math.floor(max / 2)); b = r(0, max - a); ans = a + b; op = '+'; } else { a = r(1, max); b = r(0, a); ans = a - b; op = '-'; }
+      return { type: 'calc', lv: Number(level) || 1, q: `${a} ${op} ${b} = ?`, ans, ex: `${a} ${op} ${b} = ${ans}.`, id: 'gen-' + Date.now() + '-' + Math.floor(rand() * 1e6), generated: true, subjectId: 'calcul', lessonTitle: 'Entraînement au calcul (hors manuel)' };
+    }
     const kind = level == 1 ? pick(['+', '-']) : level == 2 ? pick(['+', '-', '×']) : pick(['×', '÷', '+', '-']);
     if (kind === '+') { a = level == 1 ? r(10, 99) : r(100, 999); b = level == 1 ? r(10, 99) : r(100, 999); ans = a + b; }
     if (kind === '-') { a = level == 1 ? r(20, 99) : r(200, 999); b = r(10, a - 1); ans = a - b; }
@@ -445,6 +509,32 @@
     }
   }
 
+  // Une proposition peut être un texte ou une image : 'img:chemin|texte lu'
+  function lbl(o) {
+    const s = String(o);
+    if (!s.startsWith('img:')) return esc(s);
+    const [src, alt] = s.slice(4).split('|');
+    return `<img class="opt-img" src="${esc(src)}" alt="${esc(alt || '')}">${alt ? `<span class="opt-cap">${esc(alt)}</span>` : ''}`;
+  }
+  const plain = (o) => { const s = String(o); return s.startsWith('img:') ? (s.split('|')[1] || 'image') : s; };
+  // Lecture à voix haute (synthèse vocale du navigateur, hors ligne si disponible)
+  const canSpeak = 'speechSynthesis' in window;
+  function speak(text) {
+    if (!canSpeak) return;
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text); u.lang = 'fr-FR'; u.rate = 0.9;
+      const v = speechSynthesis.getVoices().find((x) => /^fr/i.test(x.lang)); if (v) u.voice = v;
+      speechSynthesis.speak(u);
+    } catch (e) { /* pas de voix */ }
+  }
+  function speakQuestion(q) {
+    let t = q.type === 'comp' ? q.q.replace('___', '…') : q.q;
+    if (q.type === 'qcm') t += '. ' + q.options.map(plain).join(' ; ');
+    if (q.type === 'vf') t += '. Vrai ou faux ?';
+    speak(t);
+  }
+
   function renderQuestion() {
     G.answered = false;
     const q = G.queue[G.idx];
@@ -452,21 +542,23 @@
     fb.hidden = true; fb.innerHTML = '';
     progressUpdate();
     const ti = TYPE_INFO[q.type];
-    let html = `<span class="q-type">${ti.ico} ${ti.label}</span><span class="q-level">${LEVELS[q.lv] || ''}</span>`;
+    let html = `<span class="q-type">${ti.ico} ${ti.label}</span><span class="q-level">${LEVELS[q.lv] || ''}</span>` +
+      (canSpeak ? `<button class="speak-btn" id="btn-speak" title="Écouter la question" aria-label="Écouter la question">🔈 Écouter</button>` : '');
     if (q.type === 'comp') {
       html += `<p class="q-text">Complète la phrase avec le bon mot.</p>
         <div class="sentence">${esc(q.q).replace('___', '<span class="blank" id="blank">?</span>')}</div>
-        <div class="word-bank">${q.options.map((o, i) => `<button class="word" data-i="${i}">${esc(o)}</button>`).join('')}</div>`;
+        <div class="word-bank">${q.options.map((o, i) => `<button class="word" data-i="${i}">${lbl(o)}</button>`).join('')}</div>`;
     } else {
       html += `<p class="q-text">${esc(q.q)}</p>`;
     }
+    if (q.img) html += `<div class="q-img"><img src="${esc(q.img)}" alt="Image de l'exercice"></div>`;
     if (q.type === 'qcm') {
-      html += `<div class="choices">${q.options.map((o, i) => `<button class="choice" data-i="${i}"><span class="key">${'ABCD'[i] || i + 1}</span><span>${esc(o)}</span></button>`).join('')}</div>`;
+      html += `<div class="choices">${q.options.map((o, i) => `<button class="choice" data-i="${i}"><span class="key">${'ABCD'[i] || i + 1}</span><span class="opt">${lbl(o)}</span></button>`).join('')}</div>`;
     } else if (q.type === 'vf') {
       html += `<div class="vf-buttons"><button class="choice vf-btn vrai" data-v="true"><span class="key">✔</span>VRAI</button><button class="choice vf-btn faux" data-v="false"><span class="key">✘</span>FAUX</button></div>`;
     } else if (q.type === 'multi') {
       html += `<p class="q-hint">Plusieurs réponses sont possibles : sélectionne toutes les bonnes, puis valide.</p>
-        <div class="choices">${q.options.map((o, i) => `<button class="choice" data-i="${i}" aria-pressed="false"><span class="key">☐</span><span>${esc(o)}</span></button>`).join('')}</div>
+        <div class="choices">${q.options.map((o, i) => `<button class="choice" data-i="${i}" aria-pressed="false"><span class="key">☐</span><span class="opt">${lbl(o)}</span></button>`).join('')}</div>
         <div class="validate-row"><button class="btn" id="btn-validate" disabled>Valider ✔</button></div>`;
     } else if (q.type === 'trou' || q.type === 'calc') {
       if (G.perQuestion) html += `<div class="timer-bar"><i id="q-timer"></i></div>`;
@@ -475,20 +567,23 @@
     } else if (q.type === 'rel') {
       if (q.categoryMode) {
         html += `<p class="q-hint">Pour chaque élément, choisis la bonne case.</p><div class="cat-list">${q.lefts.map((l, i) =>
-          `<div class="cat-row" data-i="${i}"><b>${esc(l)}</b><div class="chips cat-options" data-group="cat${i}">${q.rights.map((r) => `<button class="chip" data-value="${esc(r)}">${esc(r)}</button>`).join('')}</div></div>`).join('')}</div>`;
+          `<div class="cat-row" data-i="${i}"><b>${lbl(l)}</b><div class="chips cat-options" data-group="cat${i}">${q.rights.map((r) => `<button class="chip" data-value="${esc(r)}">${lbl(r)}</button>`).join('')}</div></div>`).join('')}</div>`;
       } else {
         html += `<p class="q-hint">Touche un élément à gauche, puis l'élément qui va avec à droite.</p>
-          <div class="match-grid"><div class="match-col" id="match-left">${q.lefts.map((l, i) => `<button class="match-item" data-side="L" data-i="${i}">${esc(l)}</button>`).join('')}</div>
-          <div class="match-col" id="match-right">${q.rights.map((r, i) => `<button class="match-item" data-side="R" data-i="${i}">${esc(r)}</button>`).join('')}</div></div>`;
+          <div class="match-grid"><div class="match-col" id="match-left">${q.lefts.map((l, i) => `<button class="match-item" data-side="L" data-i="${i}">${lbl(l)}</button>`).join('')}</div>
+          <div class="match-col" id="match-right">${q.rights.map((r, i) => `<button class="match-item" data-side="R" data-i="${i}">${lbl(r)}</button>`).join('')}</div></div>`;
       }
       html += `<div class="validate-row"><button class="btn ghost" id="btn-reset">↺ Recommencer</button><button class="btn" id="btn-validate" disabled>Valider ✔</button></div>`;
     } else if (q.type === 'ord') {
       html += `<p class="q-hint">Touche les éléments dans le bon ordre. Touche un élément placé pour le retirer.</p>
-        <div class="order-zone" id="order-zone"></div><div class="order-pool" id="order-pool">${q.pool.map((t, i) => `<button class="order-item" data-i="${i}">${esc(t)}</button>`).join('')}</div>
+        <div class="order-zone" id="order-zone"></div><div class="order-pool" id="order-pool">${q.pool.map((t, i) => `<button class="order-item" data-i="${i}">${lbl(t)}</button>`).join('')}</div>
         <div class="validate-row"><button class="btn" id="btn-validate" disabled>Valider ✔</button></div>`;
     }
-    html += `<div class="q-origin">${q.generated ? '🧮 Opération d\'entraînement (hors manuel)' : `📘 ${esc(SUBJ(q.subjectId).name)} · ${esc(q.lessonTitle)} · manuel p. ${esc(q.pages)}`}</div>`;
+    html += `<div class="q-origin">${q.generated ? '🧮 Opération d\'entraînement (hors manuel)' : `📘 ${esc(SUBJ(q.subjectId).className)} · ${esc(SUBJ(q.subjectId).name)} · ${esc(q.lessonTitle)} · manuel p. ${esc(q.pages)}`}</div>`;
     card.innerHTML = html;
+    const sp = $('#btn-speak', card); if (sp) sp.onclick = () => speakQuestion(q);
+    // Petites classes : la question est lue automatiquement
+    if (S.settings.voice && (q.classId === 'ci' || q.classId === 'cp') && !G.exam && !G.endless) setTimeout(() => speakQuestion(q), 250);
     bindQuestion(q, card);
     card.classList.remove('pop'); void card.offsetWidth;
   }
@@ -584,13 +679,13 @@
   }
   function correctText(q) {
     switch (q.type) {
-      case 'qcm': case 'comp': return q.good;
+      case 'qcm': case 'comp': return plain(q.good);
       case 'vf': return q.ans ? 'VRAI' : 'FAUX';
-      case 'multi': return q.good.join(' · ');
+      case 'multi': return q.good.map(plain).join(' · ');
       case 'trou': return q.ans[0];
       case 'calc': return fmtNum(q.ans);
-      case 'rel': return q.pairs.map((p) => p[0] + ' → ' + p[1]).join(' ; ');
-      case 'ord': return q.items.map((t, i) => (i + 1) + '. ' + t).join('  ');
+      case 'rel': return q.pairs.map((p) => plain(p[0]) + ' → ' + plain(p[1])).join(' ; ');
+      case 'ord': return q.items.map((t, i) => (i + 1) + '. ' + plain(t)).join('  ');
     }
     return '';
   }
@@ -598,10 +693,10 @@
     if (a == null || a === '' || (Array.isArray(a) && !a.length)) return '— (pas de réponse)';
     switch (q.type) {
       case 'vf': return a ? 'VRAI' : 'FAUX';
-      case 'multi': return a.join(' · ');
-      case 'rel': return a.map((p) => p[0] + ' → ' + (p[1] || '?')).join(' ; ');
-      case 'ord': return a.map((t, i) => (i + 1) + '. ' + t).join('  ');
-      default: return String(a);
+      case 'multi': return a.map(plain).join(' · ');
+      case 'rel': return a.map((p) => plain(p[0]) + ' → ' + (p[1] ? plain(p[1]) : '?')).join(' ; ');
+      case 'ord': return a.map((t, i) => (i + 1) + '. ' + plain(t)).join('  ');
+      default: return plain(a);
     }
   }
 
@@ -739,7 +834,7 @@
     if (g.mode === 'calc') S.bestCalc = Math.max(S.bestCalc, correct);
     if (g.exam && (S.bestExam == null || entry.note > S.bestExam)) S.bestExam = entry.note;
     if (g.daily) {
-      const d = S.daily[todayKey()] || (S.daily[todayKey()] = {});
+      const d = S.daily[dkey()] || (S.daily[dkey()] = {});
       if (d[g.daily] == null) { bonusDaily = 30; g.points += bonusDaily; entry.points = g.points; }
       d[g.daily] = Math.max(d[g.daily] || 0, correct);
     }
@@ -816,7 +911,7 @@
   function renderExamSetup() {
     const body = $('#exam-setup-body');
     body.innerHTML = `<p class="lead">Comme une vraie évaluation : questions mélangées, temps limité, et la correction n'apparaît qu'à la fin. Ta note est calculée sur 20.</p>
-      <span class="opt-label">Matière</span>${chipGroup('subject', [{ value: 'all', label: '📚 Toutes les matières' }].concat(SUBJECTS.map((s) => ({ value: s.id, label: s.icon + ' ' + s.name }))), 'all')}
+      <span class="opt-label">Domaine</span>${chipGroup('subject', [{ value: 'all', label: '📚 Tous les domaines' }].concat(classBooks(S.cls).map((s) => ({ value: s.id, label: s.icon + ' ' + s.name }))), 'all')}
       <span class="opt-label">Nombre de questions</span>${chipGroup('count', [10, 20, 30, 40].map((n) => ({ value: n, label: n + ' questions' })), 20)}
       <span class="opt-label">Durée</span>${chipGroup('time', [5, 10, 15, 20, 30].map((n) => ({ value: n, label: n + ' min' })), 15)}
       <span class="opt-label">Niveau</span>${chipGroup('level', [{ value: 'all', label: 'Tous niveaux' }, { value: 1, label: 'Débutant' }, { value: 2, label: 'Intermédiaire' }, { value: 3, label: 'Expert' }], 'all')}
@@ -826,7 +921,7 @@
     bindChips(body);
     $('#exam-go').onclick = () => {
       const sid = chipVal(body, 'subject'); const n = +chipVal(body, 'count'); const min = +chipVal(body, 'time'); const lv = chipVal(body, 'level');
-      let pool = (sid === 'all' ? ALL_Q : subjectQuestions(sid)).filter((q) => lv === 'all' || String(q.lv) === lv);
+      let pool = (sid === 'all' ? classQ(S.cls) : subjectQuestions(sid)).filter((q) => lv === 'all' || String(q.lv) === lv);
       if (pool.length < n) toast(`Seulement ${pool.length} questions disponibles pour ce choix.`);
       const qs = shuffle(pool).slice(0, n);
       startGame({ mode: 'exam', exam: true, title: '📝 Examen — ' + (sid === 'all' ? 'Toutes les matières' : SUBJ(sid).name), subjectId: sid === 'all' ? null : sid, questions: qs, timeLimit: min * 60, examMinutes: min, replay: () => show('exam-setup') });
@@ -868,23 +963,23 @@
   function renderRandom() {
     const body = $('#random-body');
     body.innerHTML = `<p class="lead">Le générateur pioche des questions au hasard dans les matières que tu choisis.</p>
-      <span class="opt-label">Matières (choix multiple)</span>
-      <div class="chips" data-group="subj" data-multi="1">${SUBJECTS.map((s) => `<button class="chip on" data-value="${s.id}">${s.icon} ${esc(s.name)}</button>`).join('')}</div>
+      <span class="opt-label">Domaines (choix multiple)</span>
+      <div class="chips" data-group="subj" data-multi="1">${classBooks(S.cls).map((s) => `<button class="chip on" data-value="${s.id}">${s.icon} ${esc(s.name)}</button>`).join('')}</div>
       <span class="opt-label">Nombre de questions</span>${chipGroup('count', [5, 10, 15, 20].map((n) => ({ value: n, label: n })), 10)}
       <span class="opt-label">Niveau</span>${chipGroup('level', [{ value: 'all', label: 'Tous' }, { value: 1, label: 'Débutant' }, { value: 2, label: 'Intermédiaire' }, { value: 3, label: 'Expert' }], 'all')}
-      <span class="opt-label">Type de jeu</span>${chipGroup('format', formatOptions(ALL_Q), 'mix')}
+      <span class="opt-label">Type de jeu</span>${chipGroup('format', formatOptions(classQ(S.cls)), 'mix')}
       <div class="btn-row"><button class="btn green" id="rnd-go">🎲 Générer mon quiz</button></div>`;
     bindChips(body);
     $('#rnd-go').onclick = () => {
       const subs = chipVals(body, 'subj'); if (!subs.length) return toast('Choisis au moins une matière.');
-      const pool = filterQs(ALL_Q.filter((q) => subs.includes(q.subjectId)), chipVal(body, 'level'), chipVal(body, 'format'));
+      const pool = filterQs(classQ(S.cls).filter((q) => subs.includes(q.subjectId)), chipVal(body, 'level'), chipVal(body, 'format'));
       if (!pool.length) return toast('Aucune question pour ce choix.');
       const n = +chipVal(body, 'count');
       startGame({ mode: 'random', title: '🎲 Quiz aléatoire', questions: shuffle(pool).slice(0, n), replay: () => show('random') });
     };
   }
 
-  function calcPool(scope) { return ALL_Q.filter((q) => q.type === 'calc' && (scope === 'all' || q.subjectId === scope)); }
+  function calcPool(scope) { return classQ(S.cls).filter((q) => q.type === 'calc' && (scope === 'all' || q.subjectId === scope)); }
   function buildCalcQuestions(scope, level, n, rng) {
     let book = calcPool(scope); if (level !== 'all') book = book.filter((q) => String(q.lv) === String(level));
     const chosen = shuffle(book, rng).slice(0, Math.min(book.length, Math.ceil(n * 0.6)));
@@ -895,7 +990,7 @@
     const body = $('#calc-body');
     body.innerHTML = `<p class="lead">Réponds le plus vite possible ! Tu as un temps limité pour chaque calcul.</p>
       <div class="info-box">📘 Les calculs utilisent les nombres du manuel (dates, distances, populations…). Ils sont complétés par des opérations d'entraînement signalées « hors manuel ».</div>
-      <span class="opt-label">Thème</span>${chipGroup('scope', [{ value: 'all', label: '📚 Tout le manuel' }].concat(SUBJECTS.map((s) => ({ value: s.id, label: `${s.icon} ${s.name} (${calcPool(s.id).length})` }))), 'all')}
+      <span class="opt-label">Thème</span>${chipGroup('scope', [{ value: 'all', label: '📚 Tous les domaines' }].concat(classBooks(S.cls).map((s) => ({ value: s.id, label: `${s.icon} ${s.name} (${calcPool(s.id).length})` }))), 'all')}
       <span class="opt-label">Niveau</span>${chipGroup('level', [{ value: 'all', label: 'Tous' }, { value: 1, label: 'Débutant' }, { value: 2, label: 'Intermédiaire' }, { value: 3, label: 'Expert' }], 'all')}
       <span class="opt-label">Temps par calcul</span>${chipGroup('time', [15, 20, 30, 45].map((n) => ({ value: n, label: n + ' s' })), 30)}
       <div class="btn-row"><button class="btn green" id="calc-go">🧮 C'est parti (10 calculs)</button></div>
@@ -904,15 +999,15 @@
     $('#calc-go').onclick = () => startCalc(chipVal(body, 'scope'), chipVal(body, 'level'), +chipVal(body, 'time'));
   }
   function startCalc(scope, level, perQ, daily) {
-    const rng = daily ? seededRng('calc' + todayKey()) : rand;
+    const rng = daily ? seededRng('calc' + S.cls + todayKey()) : rand;
     startGame({ mode: 'calc', title: daily ? '🎯 Calcul du jour' : '🧮 Calcul rapide', questions: buildCalcQuestions(scope, level, 10, rng), perQuestion: perQ, daily, replay: () => (daily ? show('daily') : show('calc-setup')) });
   }
 
-  function chronoPool(scope) { return ALL_Q.filter((q) => ['qcm', 'vf', 'comp'].includes(q.type) && (scope === 'all' || q.subjectId === scope)); }
+  function chronoPool(scope) { return classQ(S.cls).filter((q) => ['qcm', 'vf', 'comp'].includes(q.type) && (scope === 'all' || q.subjectId === scope)); }
   function renderChronoSetup() {
     const body = $('#chrono-body');
     body.innerHTML = `<p class="lead">Réponds au maximum de questions avant la fin du chrono. Chaque bonne réponse compte !</p>
-      <span class="opt-label">Matière</span>${chipGroup('scope', [{ value: 'all', label: '📚 Toutes' }].concat(SUBJECTS.map((s) => ({ value: s.id, label: s.icon + ' ' + s.name }))), 'all')}
+      <span class="opt-label">Domaine</span>${chipGroup('scope', [{ value: 'all', label: '📚 Toutes' }].concat(classBooks(S.cls).map((s) => ({ value: s.id, label: s.icon + ' ' + s.name }))), 'all')}
       <span class="opt-label">Durée</span>${chipGroup('time', [60, 90, 120].map((n) => ({ value: n, label: n + ' secondes' })), 90)}
       <div class="btn-row"><button class="btn green" id="chrono-go">⏱️ Lancer le chrono</button></div>
       ${S.bestChrono ? `<p style="font-weight:800">🏅 Ton record : ${S.bestChrono} bonnes réponses</p>` : ''}`;
@@ -920,7 +1015,7 @@
     $('#chrono-go').onclick = () => startChrono(chipVal(body, 'scope'), +chipVal(body, 'time'));
   }
   function startChrono(scope, seconds, daily) {
-    const rng = daily ? seededRng('chrono' + todayKey()) : rand;
+    const rng = daily ? seededRng('chrono' + S.cls + todayKey()) : rand;
     const source = () => shuffle(chronoPool(scope), rng);
     startGame({ mode: 'chrono', endless: true, title: daily ? '🎯 Chrono du jour' : '⏱️ Défi chrono', questions: source(), source, timeLimit: seconds, daily, replay: () => (daily ? show('daily') : show('chrono-setup')) });
   }
@@ -949,7 +1044,7 @@
      12. DÉFIS DU JOUR
      ------------------------------------------------------------------ */
   function renderDaily() {
-    const d = S.daily[todayKey()] || {};
+    const d = S.daily[dkey()] || {};
     const card = (key, ico, title, desc, btn) => `<div class="daily-card ${d[key] != null ? 'done' : ''}">
       <span class="d-ico">${ico}</span><h3>${title}</h3><p>${desc}</p>
       <p style="font-weight:900">${d[key] != null ? '✅ Réussi — meilleur score : ' + d[key] : '🎁 +30 points bonus'}</p>
@@ -963,7 +1058,7 @@
       </div>`;
     $$('#daily-body [data-daily]').forEach((b) => (b.onclick = () => {
       const k = b.dataset.daily;
-      if (k === 'quiz') { const rng = seededRng('quiz' + todayKey()); const qs = shuffle(ALL_Q, rng).slice(0, 10).sort((a, b2) => a.lv - b2.lv); startGame({ mode: 'daily', daily: 'quiz', title: '🎯 Quiz du jour', questions: qs, replay: () => show('daily') }); }
+      if (k === 'quiz') { const rng = seededRng('quiz' + S.cls + todayKey()); const qs = shuffle(classQ(S.cls), rng).slice(0, 10).sort((a, b2) => a.lv - b2.lv); startGame({ mode: 'daily', daily: 'quiz', title: '🎯 Quiz du jour', questions: qs, replay: () => show('daily') }); }
       if (k === 'chrono') startChrono('all', 60, 'chrono');
       if (k === 'calc') startCalc('all', 'all', 30, 'calc');
     }));
@@ -976,7 +1071,7 @@
   function renderDashboard() {
     const { rank, next } = rankOf(S.points);
     const rate = pct(S.correct, S.answered);
-    const subjRows = SUBJECTS.map((s) => { const r = subjectRate(s.id); return `<div class="subj-row"><span>${s.icon} ${esc(s.name)}</span><div class="meter"><i style="width:${r || 0}%;background:${s.color}"></i></div><span>${r == null ? '—' : r + ' %'}</span></div>`; }).join('');
+    const subjRows = (SUBJECTS.filter((s) => S.subj[s.id]).length ? SUBJECTS.filter((s) => S.subj[s.id]) : classBooks(S.cls || "cm1")).map((s) => { const r = subjectRate(s.id); return `<div class="subj-row"><span>${s.icon} ${esc(s.className)} · ${esc(s.name)}</span><div class="meter"><i style="width:${r || 0}%;background:${s.color}"></i></div><span>${r == null ? '—' : r + ' %'}</span></div>`; }).join('');
     const played = SUBJECTS.filter((s) => (S.subj[s.id] || {}).answered >= 5);
     const mastered = played.filter((s) => subjectRate(s.id) >= 75);
     const toImprove = played.filter((s) => subjectRate(s.id) < 60);
@@ -996,9 +1091,9 @@
         <div class="kpi"><span class="kpi-ico">🎯</span><b>${rate} %</b><small>Taux de réussite</small></div>
         <div class="kpi"><span class="kpi-ico">⭐</span><b>${S.points.toLocaleString('fr-FR')}</b><small>Points obtenus</small></div>
       </div>
-      <div class="panel"><h3>📚 Réussite par matière</h3>${subjRows}</div>
+      <div class="panel"><h3>📚 Réussite par domaine</h3>${subjRows}</div>
       <div class="two-col">
-        <div class="panel"><h3>🏅 Matières maîtrisées</h3><div class="tag-list">${mastered.length ? mastered.map((s) => `<span class="tag good">${s.icon} ${esc(s.name)} (${subjectRate(s.id)} %)</span>`).join('') : '<span class="tag neutral">Atteins 75 % de réussite dans une matière</span>'}</div></div>
+        <div class="panel"><h3>🏅 Domaines maîtrisés</h3><div class="tag-list">${mastered.length ? mastered.map((s) => `<span class="tag good">${s.icon} ${esc(s.name)} (${subjectRate(s.id)} %)</span>`).join('') : '<span class="tag neutral">Atteins 75 % de réussite dans une matière</span>'}</div></div>
         <div class="panel"><h3>🛠️ À améliorer</h3><div class="tag-list">${toImprove.length || weakLessons.length ? toImprove.map((s) => `<span class="tag bad">${s.icon} ${esc(s.name)} (${subjectRate(s.id)} %)</span>`).join('') + weakLessons.map((l) => `<span class="tag bad">📄 ${esc(LESSON_BY_ID[l].lesson.title)}</span>`).join('') : '<span class="tag neutral">Rien à signaler pour l\'instant 👍</span>'}</div></div>
       </div>
       <div class="panel"><h3>🏆 Badges débloqués (${unlocked.length} / ${BADGES.length})</h3><div class="tag-list">${unlocked.length ? unlocked.map((b) => `<span class="mini-badge">${b.ico} ${esc(b.name)}</span>`).join('') : '<span class="tag neutral">Aucun badge pour l\'instant : joue pour en gagner !</span>'}</div></div>
@@ -1045,6 +1140,8 @@
     sfx('click'); show(go.dataset.go);
   });
   $('#game-quit').onclick = quitGame;
+  $('#btn-start').onclick = () => { sfx('click'); if (S.cls) openClass(S.cls); else $('#classes').scrollIntoView({ behavior: 'smooth' }); };
+  $('#hdr-class').onclick = () => { show('home'); setTimeout(() => $('#classes').scrollIntoView({ behavior: 'smooth' }), 50); };
   $('#modal-close').onclick = closeModal;
   $('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal') closeModal(); });
   $('#btn-sound').onclick = () => { S.settings.sound = !S.settings.sound; save(); updateHeader(); sfx('click'); };
