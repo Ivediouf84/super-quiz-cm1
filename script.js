@@ -348,7 +348,7 @@
           const stars = st ? starsFor(st.best) : 0;
           return `<button class="lesson-row" data-lesson="${l.id}">
             <span class="lesson-num" style="background:${s.color}">${n}</span>
-            <span class="lesson-main"><b>${esc(l.title)}</b><small>Manuel p. ${esc(l.pages)} · ${l.questions.length} questions${st ? ' · Meilleur score ' + st.best + ' %' : ''}</small></span>
+            <span class="lesson-main"><b>${esc(l.title)}</b><small>${esc(srcLabel(l.pages, "Manuel"))} · ${l.questions.length} questions${st ? ' · Meilleur score ' + st.best + ' %' : ''}</small></span>
             <span class="lesson-stars">${starsHtml(stars)}</span>
           </button>`;
         }).join('')}</div></div>`;
@@ -359,9 +359,12 @@
     show('subject');
   }
 
+  // « 12-13 » → « manuel p. 12-13 » ; une source non numérotée (ex. « Cartes mémoire ») est affichée telle quelle.
+  const srcLabel = (p, word) => (/^\d/.test(String(p)) ? word + " p. " + p : String(p || ""));
+
   function retiensHtml(lesson) {
     if (!lesson.summary || !lesson.summary.length) return '';
-    return `<div class="retiens"><h4>📌 Je retiens — manuel p. ${esc(lesson.pages)}</h4>${lesson.img ? `<img class="retiens-img" src="${esc(lesson.img)}" alt="">` : ''}<ul>${lesson.summary.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>`;
+    return `<div class="retiens"><h4>📌 Je retiens — ${esc(srcLabel(lesson.pages, "manuel"))}</h4>${lesson.img ? `<img class="retiens-img" src="${esc(lesson.img)}" alt="">` : ''}<ul>${lesson.summary.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>`;
   }
   function formatOptions(questions) {
     const counts = {}; questions.forEach((q) => (counts[q.type] = (counts[q.type] || 0) + 1));
@@ -579,7 +582,7 @@
         <div class="order-zone" id="order-zone"></div><div class="order-pool" id="order-pool">${q.pool.map((t, i) => `<button class="order-item" data-i="${i}">${lbl(t)}</button>`).join('')}</div>
         <div class="validate-row"><button class="btn" id="btn-validate" disabled>Valider ✔</button></div>`;
     }
-    html += `<div class="q-origin">${q.generated ? '🧮 Opération d\'entraînement (hors manuel)' : `📘 ${esc(SUBJ(q.subjectId).className)} · ${esc(SUBJ(q.subjectId).name)} · ${esc(q.lessonTitle)} · manuel p. ${esc(q.pages)}`}</div>`;
+    html += `<div class="q-origin">${q.generated ? '🧮 Opération d\'entraînement (hors manuel)' : `📘 ${esc(SUBJ(q.subjectId).className)} · ${esc(SUBJ(q.subjectId).name)} · ${esc(q.lessonTitle)} · ${esc(srcLabel(q.pages, "manuel"))}`}</div>`;
     card.innerHTML = html;
     const sp = $('#btn-speak', card); if (sp) sp.onclick = () => speakQuestion(q);
     // Petites classes : la question est lue automatiquement
